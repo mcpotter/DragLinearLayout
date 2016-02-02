@@ -29,17 +29,5 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.novoda:bintray-release:0.3.4'
     }
-}
-
-// https://github.com/novoda/bintray-release/wiki/Configuration-of-the-publish-closure
-publish {
-    userOrg = 'justasm'
-    groupId = 'com.jmedeisis'
-    artifactId = 'draglinearlayout'
-    version = "1.1.0"
-    licences = ['MIT']
-    description = "Android LinearLayout with drag and drop to reorder."
-    website = 'https://github.com/justasm/DragLinearLayout'
 }

@@ -47,7 +47,7 @@ public class DragLinearLayout extends LinearLayout {
     private final float nominalDistanceScaled;
 
     /**
-     * Use with {@link com.jmedeisis.draglinearlayout.DragLinearLayout#setOnViewSwapListener(com.jmedeisis.draglinearlayout.DragLinearLayout.OnViewSwapListener)}
+     * Use with {@link DragLinearLayout#setOnViewSwapListener(DragLinearLayout.OnViewSwapListener)}
      * to listen for draggable view swaps.
      */
     public interface OnViewSwapListener {
@@ -62,7 +62,10 @@ public class DragLinearLayout extends LinearLayout {
 
     private OnViewSwapListener swapListener;
 
-    private LayoutTransition layoutTransition;
+    /**
+     * This flag is used to turn dragging on and off. Setting it to true switches off dragging.
+     */
+    protected boolean turnOffDrag = false;
 
     /**
      * Mapping from child index to drag-related info container.
@@ -85,6 +88,13 @@ public class DragLinearLayout extends LinearLayout {
             if (null != swapAnimation) swapAnimation.cancel();
         }
     }
+
+    public interface OnAnimationHookListener {
+        void onAnimationStart(View view);
+        void onAnimationEnd();
+    }
+
+    private OnAnimationHookListener onAnimationHookListener;
 
     /**
      * Holds state information about the currently dragged item.
@@ -129,6 +139,7 @@ public class DragLinearLayout extends LinearLayout {
 
         public void onDragStart() {
             view.setVisibility(View.INVISIBLE);
+            onAnimationHookListener.onAnimationStart(draggedItem.view);
             this.dragging = true;
         }
 
@@ -166,7 +177,7 @@ public class DragLinearLayout extends LinearLayout {
     }
 
     /**
-     * The currently dragged item, if {@link com.jmedeisis.draglinearlayout.DragLinearLayout.DragItem#detecting}.
+     * The currently dragged item, if {@link DragLinearLayout.DragItem#detecting}.
      */
     private final DragItem draggedItem;
     private final int slop;
@@ -209,14 +220,16 @@ public class DragLinearLayout extends LinearLayout {
         slop = vc.getScaledTouchSlop();
 
         final Resources resources = getResources();
-        dragTopShadowDrawable = ContextCompat.getDrawable(context, R.drawable.ab_solid_shadow_holo_flipped);
+        dragTopShadowDrawable = ContextCompat.getDrawable(context,
+            R.drawable.ab_solid_shadow_holo_flipped);
         dragBottomShadowDrawable = ContextCompat.getDrawable(context, R.drawable.ab_solid_shadow_holo);
         dragShadowHeight = resources.getDimensionPixelSize(R.dimen.downwards_drop_shadow_height);
 
-        TypedArray a = context.getTheme().obtainStyledAttributes(attrs, R.styleable.DragLinearLayout, 0, 0);
+        TypedArray
+            a = context.getTheme().obtainStyledAttributes(attrs, R.styleable.DragLinearLayout, 0, 0);
         try {
             scrollSensitiveAreaHeight = a.getDimensionPixelSize(R.styleable.DragLinearLayout_scrollSensitiveHeight,
-                    (int) (DEFAULT_SCROLL_SENSITIVE_AREA_HEIGHT_DP * resources.getDisplayMetrics().density + 0.5f));
+                (int) (DEFAULT_SCROLL_SENSITIVE_AREA_HEIGHT_DP * resources.getDisplayMetrics().density + 0.5f));
         } finally {
             a.recycle();
         }
@@ -265,11 +278,6 @@ public class DragLinearLayout extends LinearLayout {
      * Makes the child a candidate for dragging. Must be an existing child of this layout.
      */
     public void setViewDraggable(View child, View dragHandle) {
-        if (null == child || null == dragHandle) {
-            throw new IllegalArgumentException(
-                "Draggable children and their drag handles must not be null.");
-        }
-        
         if (this == child.getParent()) {
             dragHandle.setOnTouchListener(new DragHandleOnTouchListener(child));
             draggableChildren.put(indexOfChild(child), new DraggableChild());
@@ -304,12 +312,6 @@ public class DragLinearLayout extends LinearLayout {
         }
     }
 
-    @Override
-    public void removeAllViews() {
-        super.removeAllViews();
-        draggableChildren.clear();
-    }
-
     /**
      * If this layout is within a {@link android.widget.ScrollView}, register it here so that it
      * can be scrolled during item drags.
@@ -334,10 +336,14 @@ public class DragLinearLayout extends LinearLayout {
     }
 
     /**
-     * See {@link com.jmedeisis.draglinearlayout.DragLinearLayout.OnViewSwapListener}.
+     * See {@link DragLinearLayout.OnViewSwapListener}.
      */
     public void setOnViewSwapListener(OnViewSwapListener swapListener) {
         this.swapListener = swapListener;
+    }
+
+    public void setOnAnimationHookListener(OnAnimationHookListener listener) {
+        this.onAnimationHookListener = listener;
     }
 
     /**
@@ -345,12 +351,12 @@ public class DragLinearLayout extends LinearLayout {
      */
     private long getTranslateAnimationDuration(float distance) {
         return Math.min(MAX_SWITCH_DURATION, Math.max(MIN_SWITCH_DURATION,
-                (long) (NOMINAL_SWITCH_DURATION * Math.abs(distance) / nominalDistanceScaled)));
+            (long) (NOMINAL_SWITCH_DURATION * Math.abs(distance) / nominalDistanceScaled)));
     }
 
     /**
      * Initiates a new {@link #draggedItem} unless the current one is still
-     * {@link com.jmedeisis.draglinearlayout.DragLinearLayout.DragItem#detecting}.
+     * {@link DragLinearLayout.DragItem#detecting}.
      */
     private void startDetectingDrag(View child) {
         if (draggedItem.detecting)
@@ -365,13 +371,6 @@ public class DragLinearLayout extends LinearLayout {
     }
 
     private void startDrag() {
-        // remove layout transition, it conflicts with drag animation
-        // we will restore it after drag animation end, see onDragStop()
-        layoutTransition = getLayoutTransition();
-        if (layoutTransition != null) {
-            setLayoutTransition(null);
-        }
-
         draggedItem.onDragStart();
         requestDisallowInterceptTouchEvent(true);
     }
@@ -381,8 +380,8 @@ public class DragLinearLayout extends LinearLayout {
      */
     private void onDragStop() {
         draggedItem.settleAnimation = ValueAnimator.ofFloat(draggedItem.totalDragOffset,
-                draggedItem.totalDragOffset - draggedItem.targetTopOffset)
-                .setDuration(getTranslateAnimationDuration(draggedItem.targetTopOffset));
+            draggedItem.totalDragOffset - draggedItem.targetTopOffset)
+            .setDuration(getTranslateAnimationDuration(draggedItem.targetTopOffset));
         draggedItem.settleAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
@@ -393,7 +392,7 @@ public class DragLinearLayout extends LinearLayout {
                 final int shadowAlpha = (int) ((1 - animation.getAnimatedFraction()) * 255);
                 if (null != dragTopShadowDrawable) dragTopShadowDrawable.setAlpha(shadowAlpha);
                 dragBottomShadowDrawable.setAlpha(shadowAlpha);
-                invalidate();
+                DragLinearLayout.this.invalidate();
             }
         });
         draggedItem.settleAnimation.addListener(new AnimatorListenerAdapter() {
@@ -413,10 +412,8 @@ public class DragLinearLayout extends LinearLayout {
 
                 if (null != dragTopShadowDrawable) dragTopShadowDrawable.setAlpha(255);
                 dragBottomShadowDrawable.setAlpha(255);
-
-                // restore layout transition
-                if (layoutTransition != null && getLayoutTransition() == null) {
-                    setLayoutTransition(layoutTransition);
+                if (onAnimationHookListener != null) {
+                    onAnimationHookListener.onAnimationEnd();
                 }
             }
         });
@@ -442,9 +439,9 @@ public class DragLinearLayout extends LinearLayout {
         View aboveView = getChildAt(abovePosition);
 
         final boolean isBelow = (belowView != null) &&
-                (currentTop + draggedItem.height > belowView.getTop() + belowView.getHeight() / 2);
+            (currentTop + draggedItem.height > belowView.getTop() + belowView.getHeight() / 2);
         final boolean isAbove = (aboveView != null) &&
-                (currentTop < aboveView.getTop() + aboveView.getHeight() / 2);
+            (currentTop < aboveView.getTop() + aboveView.getHeight() / 2);
 
         if (isBelow || isAbove) {
             final View switchView = isBelow ? belowView : aboveView;
@@ -476,14 +473,14 @@ public class DragLinearLayout extends LinearLayout {
             draggedItem.position = switchPosition;
 
             final ViewTreeObserver switchViewObserver = switchView.getViewTreeObserver();
-            switchViewObserver.addOnPreDrawListener(new OnPreDrawListener() {
+            switchViewObserver.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
                 @Override
                 public boolean onPreDraw() {
                     switchViewObserver.removeOnPreDrawListener(this);
 
                     final ObjectAnimator switchAnimator = ObjectAnimator.ofFloat(switchView, "y",
-                            switchViewStartY, switchView.getTop())
-                            .setDuration(getTranslateAnimationDuration(switchView.getTop() - switchViewStartY));
+                        switchViewStartY, switchView.getTop())
+                        .setDuration(getTranslateAnimationDuration(switchView.getTop() - switchViewStartY));
                     switchAnimator.addListener(new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
@@ -502,7 +499,7 @@ public class DragLinearLayout extends LinearLayout {
             });
 
             final ViewTreeObserver observer = draggedItem.view.getViewTreeObserver();
-            observer.addOnPreDrawListener(new OnPreDrawListener() {
+            observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
                 @Override
                 public boolean onPreDraw() {
                     observer.removeOnPreDrawListener(this);
@@ -560,7 +557,7 @@ public class DragLinearLayout extends LinearLayout {
                 @Override
                 public void run() {
                     if (draggedItem.dragging && startScrollY != containerScrollView.getScrollY()) {
-                        onDrag(draggedItem.totalDragOffset + delta);
+                        DragLinearLayout.this.onDrag(draggedItem.totalDragOffset + delta);
                     }
                 }
             };
@@ -632,6 +629,9 @@ public class DragLinearLayout extends LinearLayout {
     public boolean onInterceptTouchEvent(MotionEvent event) {
         switch (MotionEventCompat.getActionMasked(event)) {
             case MotionEvent.ACTION_DOWN: {
+                if (turnOffDrag) {
+                    return false;
+                }
                 if (draggedItem.detecting) return false; // an existing item is (likely) settling
                 downY = (int) MotionEventCompat.getY(event, 0);
                 activePointerId = MotionEventCompat.getPointerId(event, 0);
